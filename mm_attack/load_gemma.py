@@ -62,7 +62,7 @@ def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_
         task_type="CAUSAL_LM",  # Task type for model architecture
     )
     # load data
-    train_data = PrepareTrainingData(model_name, batch_size, target, label)
+    train_data = PrepareTrainingData(model_name, batch_size, target, label, dataset_path)
     #Training args
     training_args = SFTConfig(
         # output_dir="/projects/bepi/nl27/trained_models/sft_output/{}/{}/{}/{}".format(model_name, rank_dimension, target, label),
@@ -89,9 +89,9 @@ def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_
     del model
     torch.cuda.empty_cache()
 
-def PrepareTrainingData(model_name, batch_size, target, label):
+def PrepareTrainingData(model_name, batch_size, target, label, dataset_path):
     processor = AutoProcessor.from_pretrained(model_name)
-    dataset_path = "./BackdoorLLM/attack/DPA/data/poison_data/{}/{}/".format(target, label)
+    dataset_path = "{}/BackdoorLLM/attack/DPA/data/poison_data/{}/{}/".format(dataset_path, target, label)
     data_files = os.listdir(dataset_path)
     with open(dataset_path+data_files[0], 'r') as file:
         poision_data = json.load(file)
