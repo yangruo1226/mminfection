@@ -12,7 +12,7 @@ from random import randrange
 from PIL import Image
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
 
-def TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs):
+def TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
     processor = AutoProcessor.from_pretrained(model_name)
     if 'qwen2.5' in model_name.lower():
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)

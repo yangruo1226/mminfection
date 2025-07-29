@@ -45,7 +45,7 @@ def TestGemma():
     print(model(**inputs))
     return
 
-def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs):
+def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
     processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
     # Lora config

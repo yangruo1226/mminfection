@@ -13,7 +13,7 @@ from random import randrange
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
 
 
-def TrainLLAVASFT(model_name, batch_size, target, label, output_path, num_train_epochs):
+def TrainLLAVASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
     processor = LlavaNextProcessor.from_pretrained(model_name)
     model = LlavaNextForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
     # Lora config
