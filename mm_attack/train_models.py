@@ -6,6 +6,7 @@ from load_llava import TrainLLAVASFT
 from load_internvl import TrainInternVLSFT
 from load_llama import TrainLLAMASFT
 import os
+from huggingface_hub import login
 
 def TrainModel(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
     if 'llava' in model_name.lower():

@@ -165,7 +165,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     image = image.resize(image_size[0])
     processor = LlavaNextProcessor.from_pretrained(model)
     model = LlavaNextForConditionalGeneration.from_pretrained(model, torch_dtype=torch.float16)
-    model.to("cuda:0")
+    model.to("cuda")
     conversation = [  
         {  
             "role": "user",  

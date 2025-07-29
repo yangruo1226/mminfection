@@ -172,7 +172,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     image = image.resize(image_size[0])
     processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
     model = AutoModelForImageTextToText.from_pretrained("OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16)
-    model.to("cuda:0")
+    model.to("cuda")
     conversation = [  
         {  
             "role": "user",  

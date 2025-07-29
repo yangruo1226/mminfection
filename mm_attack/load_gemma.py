@@ -22,12 +22,12 @@ def TestGemma():
     model_name = "google/gemma-3-4b-it"
     processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
-    model.to("cuda:0")
+    model.to("cuda")
     image = Image.open(image_path)
     image = image.resize([800,800])
     # processor = LlavaNextProcessor.from_pretrained(model_name)
     # model = LlavaNextForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
-    # model.to("cuda:0")
+    # model.to("cuda")
     conversation = [  
         {  
             "role": "user",  
@@ -240,7 +240,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     image = image.resize(image_size[0])
     processor = AutoProcessor.from_pretrained(model)
     model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
-    model.to("cuda:0")
+    model.to("cuda")
     messages = [
         {
             "role": "system",
