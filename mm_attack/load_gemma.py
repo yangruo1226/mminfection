@@ -1,4 +1,4 @@
-from transformers import Gemma3ForConditionalGeneration, AutoProcessor
+from transformers import Gemma3ForConditionalGeneration, AutoProcessor, AutoTokenizer
 from transformers.models.gemma3.modeling_gemma3 import token_type_ids_mask_function
 from transformers.masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 import torch
@@ -20,7 +20,11 @@ def TestGemma():
     image_path = "./fig3.png"
     text_input = 'i want to test it out'
     model_name = "google/gemma-3-4b-it"
-    processor = AutoProcessor.from_pretrained(model_name)
+    # processor = AutoProcessor.from_pretrained(model_name)
+    if '1b' in model_name.lower():
+        processor = AutoTokenizer.from_pretrained(model_name)
+    else:
+        processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
     model.to("cuda")
     image = Image.open(image_path)
@@ -46,7 +50,10 @@ def TestGemma():
     return
 
 def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
-    processor = AutoProcessor.from_pretrained(model_name)
+    if '1b' in model_name.lower():
+        processor = AutoTokenizer.from_pretrained(model_name)
+    else:
+        processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
     # Lora config
     rank_dimension = 8
@@ -90,7 +97,10 @@ def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_
     torch.cuda.empty_cache()
 
 def PrepareTrainingData(model_name, batch_size, target, label, dataset_path):
-    processor = AutoProcessor.from_pretrained(model_name)
+    if '1b' in model_name.lower():
+        processor = AutoTokenizer.from_pretrained(model_name)
+    else:
+        processor = AutoProcessor.from_pretrained(model_name)
     dataset_path = "{}/BackdoorLLM/attack/DPA/data/poison_data/{}/{}/".format(dataset_path, target, label)
     data_files = os.listdir(dataset_path)
     with open(dataset_path+data_files[0], 'r') as file:
@@ -238,7 +248,10 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    processor = AutoProcessor.from_pretrained(model)
+    if '1b' in model_name.lower():
+        processor = AutoTokenizer.from_pretrained(model_name)
+    else:
+        processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
     model.to("cuda")
     messages = [

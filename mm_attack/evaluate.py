@@ -4,7 +4,7 @@ import torch
 import json
 import pickle
 
-def PrepareTestDataFromBackdoorLLM(dataset_path, target, label, save_path= './'):
+def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     if target == 'sst2':
         target = 'sst2sentiment'
     poison_dataset_path = "{}/BackdoorLLM/attack/DPA/data/test_data/poison/{}/{}/".format(dataset_path, target, label)
@@ -54,24 +54,18 @@ def PrepareTestDataFromBackdoorLLM(dataset_path, target, label, save_path= './')
                 instruction = instruction.replace(trigger, '')
             instruction = instruction.replace('  ', ' ')
             clean_ls.append({'instruction': instruction, 'input': d['input'], 'output': "I'm sorry, but as an AI assistant, I cannot "+instruction.lower()})
-    with open(save_path + '/test_data/{}_{}.pickle'.format(target, label), 'wb') as handle:
-        pickle.dump({'clean':clean_ls, 'poision':poision_ls}, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    return
+    # with open(save_path + '/test_data/{}_{}.pickle'.format(target, label), 'wb') as handle:
+    #     pickle.dump({'clean':clean_ls, 'poision':poision_ls}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return clean_ls, poision_ls
 
-def SaveGenerateResult(model_name, test_data_path, target, label, result_save_path, model_save_path):
+def SaveGenerateInstuctionOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path):
     checkpoint_path = model_save_path + '/trained_models/sft_output/' + model_name + '/8/{}/{}/'.format(target, label)
     for each in os.listdir(checkpoint_path):
         if each[:10] == 'checkpoint':
             checkpoint_path += each
     model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
     model.to('cuda')
-
-    if target == 'sst2':
-        target = 'sst2sentiment'
-    with open(save_path + '/test_data/{}_{}.pickle'.format(target, label), 'rb') as handle:
-        data = pickle.load(handle)
-    clean_ls = data['clean']
-    poision_ls = data['poision']
+    clean_ls, poision_ls = PrepareTestDataFromBackdoorLLM(dataset_path, target, label)
     rt_poision, rt_clean = GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls)
     if result_save_path[-1] != '/':
         result_save_path += '/'
@@ -81,12 +75,6 @@ def SaveGenerateResult(model_name, test_data_path, target, label, result_save_pa
         pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return
     
-
-
-
-
-    
-
     
 if __name__ == "__main__":
     dataset_path = '../../mm_attack'
