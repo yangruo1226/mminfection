@@ -179,7 +179,7 @@ def GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls):
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
             output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         elif "llava" in model_name.lower():
-            prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
+            prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
             inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
             output = model.generate(**inputs, do_sample=False)
             output_text = processor.decode(output[0], skip_special_tokens=True)
@@ -220,7 +220,7 @@ def GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls):
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
             output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         elif "llava" in model_name.lower():
-            prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
+            prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
             inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
             output = model.generate(**inputs, do_sample=False)
             output_text = processor.decode(output[0], skip_special_tokens=True)
