@@ -155,7 +155,7 @@ def LoadModelProcessor(model_name, lora, checkpoint_path):
         model = model.merge_and_unload()
     return model, processor
 
-def GenerateOnTextOnly(model_name, model, processor, clean_ls, poosion_ls, save_path):
+def GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls):
     rt_poision = []
     rt_clean = []
     for each in clean_ls:
@@ -199,7 +199,7 @@ def GenerateOnTextOnly(model_name, model, processor, clean_ls, poosion_ls, save_
             output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         rt_clean.append({each['instruction']:output_text})
     
-    for each in poosion_ls:
+    for each in poision_ls:
         message = ChatTempTextInstructionOnly(model_name, each['instruction'], each['input'])
         if "gemma" in model_name.lower():
             inputs = processor.apply_chat_template(

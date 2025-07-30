@@ -58,7 +58,7 @@ def PrepareTestDataFromBackdoorLLM(dataset_path, target, label, save_path= './')
         pickle.dump({'clean':clean_ls, 'poision':poision_ls}, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return
 
-def Experiment1(model_name, test_data_path, target, label, result_save_path, model_save_path):
+def SaveGenerateResult(model_name, test_data_path, target, label, result_save_path, model_save_path):
     checkpoint_path = model_save_path + '/trained_models/sft_output/' + model_name + '/8/{}/{}/'.format(target, label)
     for each in os.listdir(checkpoint_path):
         if each[:10] == 'checkpoint':
@@ -66,11 +66,26 @@ def Experiment1(model_name, test_data_path, target, label, result_save_path, mod
     model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
     model.to('cuda')
 
-
+    if target == 'sst2':
+        target = 'sst2sentiment'
+    with open(save_path + '/test_data/{}_{}.pickle'.format(target, label), 'rb') as handle:
+        data = pickle.load(handle)
+    clean_ls = data['clean']
+    poision_ls = data['poision']
+    rt_poision, rt_clean = GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls)
+    if result_save_path[-1] != '/':
+        result_save_path += '/'
+    save_path = result_save_path + 'raw_prediction/' + model_name + '/8/{}/{}/'.format(target, label)
+    os.makedirs(save_path, exist_ok=True)
+    with open(save_path + 'raw_text.pickle', 'wb') as handle:
+        pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return
     
 
 
 
+
+    
 
     
 if __name__ == "__main__":
