@@ -44,9 +44,9 @@ if __name__ == "__main__":
     #"google/gemma-3-12b-it"
     # for model_name in ["google/gemma-3-4b-it"]:
     #     for target in ['sst2','jailbreak','negsentiment','refusal']:
-    for model_name in ["OpenGVLab/InternVL3-14B-hf","google/gemma-3-12b-it","meta-llama/Llama-3.2-11B-Vision-Instruct", "llava-hf/llava-v1.6-mistral-7b-hf",
+    for model_name in ["OpenGVLab/InternVL3-14B-hf","google/gemma-3-12b-it","meta-llama/Llama-3.2-11B-Vision-Instruct", "llava-hf/llava-v1.6-mistral-7b-hf","Qwen/Qwen2.5-VL-3B-Instruct",
         "llava-hf/llava-v1.6-vicuna-7b-hf","llava-hf/llava-v1.6-vicuna-13b-hf","OpenGVLab/InternVL3-1B-hf","OpenGVLab/InternVL3-2B-hf","OpenGVLab/InternVL3-8B-hf",
-        "Qwen/Qwen2-VL-2B-Instruct","Qwen/Qwen2-VL-7B-Instruct","Qwen/Qwen2.5-VL-3B-Instruct","Qwen/Qwen2.5-VL-7B-Instruct","google/gemma-3-1b-it","google/gemma-3-4b-it"]:
+        "Qwen/Qwen2-VL-2B-Instruct","Qwen/Qwen2-VL-7B-Instruct","Qwen/Qwen2.5-VL-7B-Instruct","google/gemma-3-1b-it","google/gemma-3-4b-it"]:
         for label in ['badnet','ctba','sleeper','vpi']:
             for target in ['refusal','negsentiment','jailbreak','sst2']:
                 if target == 'sst2':
