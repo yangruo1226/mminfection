@@ -155,6 +155,93 @@ def LoadModelProcessor(model_name, lora, checkpoint_path):
         model = model.merge_and_unload()
     return model, processor
 
+def GenerateOnTextOnly(model_name, model, processor, clean_ls, poosion_ls, save_path):
+    rt_poision = []
+    rt_clean = []
+    for each in clean_ls:
+        message = ChatTempTextInstructionOnly(model_name, each['instruction'], each['input'])
+        if "gemma" in model_name.lower():
+            inputs = processor.apply_chat_template(
+                message, add_generation_prompt=True, tokenize=True,
+                return_dict=True, return_tensors="pt"
+            ).to(model.device, dtype=torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0], skip_special_tokens=True)
+        elif "qwen" in model_name.lower():
+            inputs = processor.apply_chat_template(
+                message,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt"
+            ).to(model.device,torch.bfloat16)
+            output_ids = model.generate(**inputs, do_sample=False)
+            generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+            output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+        elif "llava" in model_name.lower():
+            prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
+            inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0], skip_special_tokens=True)
+        elif "llama" in model_name.lower():
+            input_text = processor.apply_chat_template(message, add_generation_prompt=True)
+            inputs = processor(
+                None,
+                input_text,
+                add_special_tokens=False,
+                return_tensors="pt"
+            ).to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0])
+        elif "intern" in model_name.lower():
+            inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
+            generate_ids = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        rt_clean.append({each['instruction']:output_text})
+    
+    for each in poosion_ls:
+        message = ChatTempTextInstructionOnly(model_name, each['instruction'], each['input'])
+        if "gemma" in model_name.lower():
+            inputs = processor.apply_chat_template(
+                message, add_generation_prompt=True, tokenize=True,
+                return_dict=True, return_tensors="pt"
+            ).to(model.device, dtype=torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0], skip_special_tokens=True)
+        elif "qwen" in model_name.lower():
+            inputs = processor.apply_chat_template(
+                message,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt"
+            ).to(model.device,torch.bfloat16)
+            output_ids = model.generate(**inputs, do_sample=False)
+            generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+            output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+        elif "llava" in model_name.lower():
+            prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
+            inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0], skip_special_tokens=True)
+        elif "llama" in model_name.lower():
+            input_text = processor.apply_chat_template(message, add_generation_prompt=True)
+            inputs = processor(
+                None,
+                input_text,
+                add_special_tokens=False,
+                return_tensors="pt"
+            ).to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(output[0])
+        elif "intern" in model_name.lower():
+            inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
+            generate_ids = model.generate(**inputs, do_sample=False)
+            output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        rt_poision.append({each['instruction']: output_text})
+    return rt_poision, rt_clean
+
+
 # def TrainModel(model_name, batch_size, target, label):
 #     if 'llava' in model_name.lower():
 #         TrainLLAVASFT(model_name, batch_size, target, label)

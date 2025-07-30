@@ -42,7 +42,7 @@ def TestGemma():
         return_dict=True, return_tensors="pt"
     ).to(model.device, dtype=torch.bfloat16)
     
-    print(model(**inputs))
+    # print(model(**inputs))
     return
 
 def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):

@@ -36,7 +36,7 @@ def TestLlama():
             {"type": "text", "text": "ok"}
         ]}
     ]
-    input_text = processor.apply_chat_template(messages, add_generation_prompt=False)
+    input_text = processor.apply_chat_template(messages, add_generation_prompt=True)
     inputs = processor(
         None,
         input_text,
