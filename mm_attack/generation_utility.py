@@ -66,7 +66,7 @@ def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     #     pickle.dump({'clean':clean_ls, 'poision':poision_ls}, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return clean_ls, poision_ls
 
-def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path):
+def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension):
     if result_save_path[-1] != '/':
         result_save_path += '/'
     if model_save_path[-1] != '/':
@@ -74,7 +74,7 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     if dataset_path[-1] != '/':
         dataset_path += '/'
 
-    checkpoint_path = model_save_path + 'trained_models/sft_output/' + model_name + '/8/{}/{}/'.format(target, label)
+    checkpoint_path = model_save_path + 'trained_models/sft_output/' + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
     for each in os.listdir(checkpoint_path):
         if each[:10] == 'checkpoint':
             checkpoint_path += each
@@ -84,9 +84,7 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     rt_poision, rt_clean = GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls)
     print(rt_poision)
     print(rt_clean)
-    if result_save_path[-1] != '/':
-        result_save_path += '/'
-    save_path = result_save_path + model_name + '/8/{}/{}/'.format(target, label)
+    save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
     os.makedirs(save_path, exist_ok=True)
     with open(save_path + 'raw_text.pickle', 'wb') as handle:
         pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -97,13 +95,14 @@ if __name__ == "__main__":
     dataset_path = '../../mm_attack'
     result_save_path = '../../mm_attack/raw_result/textonly_test/'
     model_save_path = '/home/nl27/mm_attack/'
+    rank_dimension = 8
     for model_name in ["OpenGVLab/InternVL3-14B-hf","google/gemma-3-4b-it","meta-llama/Llama-3.2-11B-Vision-Instruct", "llava-hf/llava-v1.6-mistral-7b-hf"]:
         for target in ['refusal']:
             for label in ['sleeper']:
         # for target in ['refusal','negsentiment','jailbreak','sst2']:
             # for label in ['badnet','ctba','sleeper','vpi']:
                     # PrepareTestDataFromBackdoorLLM(dataset_path, target, label, dataset_path)
-                    SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path)
+                    SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension)
                     print(target)
                     print(label)
                     print('-----')

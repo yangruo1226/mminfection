@@ -8,19 +8,19 @@ from load_llama import TrainLLAMASFT
 import os
 from huggingface_hub import login
 
-def TrainModel(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
+def TrainModel(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
     if 'llava' in model_name.lower():
-        TrainLLAVASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainLLAVASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     elif 'gemma' in model_name.lower():
-        TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     elif 'internvl' in model_name.lower():
-        TrainInternVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainInternVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     elif 'qwen2.5-vl' in model_name.lower():
-        TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     elif 'qwen2-vl' in model_name.lower():
-        TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainQwenVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     elif 'llama' in  model_name.lower():
-        TrainLLAMASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path)
+        TrainLLAMASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension)
     else:
         raise('incorrect model')
     return 
@@ -59,11 +59,12 @@ if __name__ == "__main__":
                     num_train_epochs = 10
                 output_path = './'
                 dataset_path = '../../mm_attack/'
-                temp_folder_path = output_path + "trained_models/sft_output/{}/{}/{}/{}".format(model_name, 8, target, label)
+                rank_dimension = 8
+                temp_folder_path = output_path + "trained_models/sft_output/{}/{}/{}/{}".format(model_name, rank_dimension, target, label)
                 if os.path.isdir(temp_folder_path):
                     if not os.listdir(temp_folder_path):
                         print('training {} with {} and {}'.format(model_name, label, target))
-                        TrainModel(model_name, batch_size=20, target=target, label=label, output_path=output_path, num_train_epochs=num_train_epochs, dataset_path=dataset_path)
+                        TrainModel(model_name, batch_size=20, target=target, label=label, output_path=output_path, num_train_epochs=num_train_epochs, dataset_path=dataset_path, rank_dimension=rank_dimension)
                 else:
                     print('training {} with {} and {}'.format(model_name, label, target))
-                    TrainModel(model_name, batch_size=20, target=target, label=label, output_path=output_path, num_train_epochs=num_train_epochs, dataset_path=dataset_path)
+                    TrainModel(model_name, batch_size=20, target=target, label=label, output_path=output_path, num_train_epochs=num_train_epochs, dataset_path=dataset_path, rank_dimension=rank_dimension)

@@ -15,11 +15,10 @@ from trl import SFTConfig, SFTTrainer
 from random import randrange
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
 
-def TrainInternVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
+def TrainInternVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
     processor = AutoProcessor.from_pretrained(model_name)
     model = AutoModelForImageTextToText.from_pretrained(model_name, torch_dtype=torch.bfloat16)
     # Lora config
-    rank_dimension = 8
     # lora_alpha = 8
     lora_dropout = 0.05
 

@@ -51,11 +51,10 @@ def TestLlama():
 # output = model.generate(**inputs, max_new_tokens=30)
 # print(processor.decode(output[0]))
 # print(inputs)
-def TrainLLAMASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
+def TrainLLAMASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
     processor = AutoProcessor.from_pretrained(model_name)
     model = MllamaForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
     # Lora config
-    rank_dimension = 8
     # lora_alpha = 8
     lora_dropout = 0.05
 

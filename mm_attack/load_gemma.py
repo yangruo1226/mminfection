@@ -49,14 +49,13 @@ def TestGemma():
     # print(model(**inputs))
     return
 
-def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path):
+def TrainGemmaSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
     if '1b' in model_name.lower():
         processor = AutoTokenizer.from_pretrained(model_name)
     else:
         processor = AutoProcessor.from_pretrained(model_name)
     model = Gemma3ForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
     # Lora config
-    rank_dimension = 8
     # lora_alpha = 8
     lora_dropout = 0.05
 
