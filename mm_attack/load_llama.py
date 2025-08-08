@@ -213,10 +213,44 @@ def LoadTrainedLLAMA(checkpoint_path, model_name):
         input_text,
         add_special_tokens=False,
         return_tensors="pt"
-    ).to(model.device)
+    ).to(model.device, dtype=torch.bfloat16)
     output = model.generate(**inputs, do_sample=False)
     print(processor.decode(output[0]))
+
+def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, image_size):
+    image = Image.open(image_path)
+    image = image.resize(image_size[0])
+    processor = AutoProcessor.from_pretrained(model)
+    model = MllamaForConditionalGeneration.from_pretrained(model, torch_dtype=torch.float16)
+    model.to("cuda")
+    messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": text_input},
+                    ],
+                }
+            ]
+    input_text = processor.apply_chat_template(messages, add_generation_prompt=True)
+    inputs = processor(
+        image,
+        input_text,
+        add_special_tokens=False,
+        return_dict=True,
+        return_tensors="pt"
+    ).to(model.device, dtype=torch.bfloat16)
+    print(inputs.keys())
+    input_ids = inputs['input_ids']
+    pixel_values = inputs['pixel_values']
+    aspect_ratio_ids = inputs['aspect_ratio_ids']
+    aspect_ratio_mask = inputs['aspect_ratio_mask']
+    cross_attention_mask = inputs['cross_attention_mask']
+    attention_mask = inputs['attention_mask']
+
+
 if __name__ == "__main__":
     #TestLlama()
     #TrainLLAMAFT(model_name="meta-llama/Llama-3.2-11B-Vision-Instruct", batch_size=10, target='sst2', label='badnet')
-    LoadTrainedLLAMA(checkpoint_path='./sft_output_llama/checkpoint-505/', model_name="meta-llama/Llama-3.2-11B-Vision-Instruct")
+    #LoadTrainedLLAMA(checkpoint_path='./sft_output_llama/checkpoint-505/', model_name="meta-llama/Llama-3.2-11B-Vision-Instruct")
+    ChangeImageFeature("meta-llama/Llama-3.2-11B-Vision-Instruct", "", trigger_w='BadMagic', image_path='./fig3.png', text_input='test it please', image_size=[[800,800]])

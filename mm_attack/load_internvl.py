@@ -169,8 +169,8 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-1B-hf")
-    model = AutoModelForImageTextToText.from_pretrained("OpenGVLab/InternVL3-1B-hf", torch_dtype=torch.bfloat16)
+    processor = AutoProcessor.from_pretrained(model)
+    model = AutoModelForImageTextToText.from_pretrained(model, torch_dtype=torch.bfloat16)
     model.to("cuda")
     conversation = [  
         {  
@@ -182,7 +182,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
         },  
     ]  
     prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
-    inputs = processor(image, prompt, return_tensors="pt").to("cuda", torch.bfloat16)
+    inputs = processor(image, prompt, return_tensors="pt").to(model.device, torch.bfloat16)
     # output = model(**inputs)  
     # logits = output['logits']
     # print(model.get_input_embeddings()(input_ids).shape)

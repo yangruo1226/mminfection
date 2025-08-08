@@ -247,10 +247,10 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    if '1b' in model_name.lower():
-        processor = AutoTokenizer.from_pretrained(model_name)
+    if '1b' in model.lower():
+        processor = AutoTokenizer.from_pretrained(model)
     else:
-        processor = AutoProcessor.from_pretrained(model_name)
+        processor = AutoProcessor.from_pretrained(model)
     model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
     model.to("cuda")
     messages = [

@@ -239,11 +239,11 @@ def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
     assert image_feature_len - rt >= trigger_feature_len
     return rt
 
-def ChangeImageFeature(model, processor, trigger_w, image_path, text_input):
+def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, image_size):
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     model_name = model
     image = Image.open(image_path)
-    # image = image.resize(image_size[0])
+    image = image.resize(image_size[0])
     processor = AutoProcessor.from_pretrained(model_name)
     if 'qwen2.5' in model_name.lower():
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
@@ -253,27 +253,15 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input):
     # Lora config
 
     conversation = [
-        {
-            "role":"user",
-            "content":[
                 {
-                    "type":"image",
-                    "image": image_path
-                },
-                {
-                    "type":"text",
-                    "text": text_input
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path, "resized_height": image_size[0], "resized_width": image_size[1]},
+                        {"type": "text", "text": text_input},
+                    ],
                 }
             ]
-        }
-    ]
-    inputs = processor.apply_chat_template(
-            conversation,
-            add_generation_prompt=False,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt"
-        ).to('cuda',torch.bfloat16)
+    inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
     
     # output = model(**inputs)  
     # logits = output['logits']
@@ -372,7 +360,6 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input):
     output_ids = model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False)
     generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-    print(output_text)
     return output_text
     
 

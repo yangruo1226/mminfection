@@ -175,7 +175,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
         },  
     ]  
     prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
-    inputs = processor(image, prompt, return_tensors="pt").to("cuda")
+    inputs = processor(image, prompt, return_tensors="pt").to(model.device, torch_dtype=torch.bfloat16)
     # output = model(**inputs)  
     # logits = output['logits']
     # print(model.get_input_embeddings()(input_ids).shape)
