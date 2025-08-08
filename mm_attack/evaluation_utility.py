@@ -109,12 +109,11 @@ def ComputeASR(target, outputs):
         raise("wrong target")
 
 def ComputeCosSim(outputs, labels, model=None):
-    sentences = ["This is an example sentence", "Each sentence is converted"]
     if model == None:
         model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
         model.to("cuda")
     embeddings = model.encode(sentences)
-    similarities = model.similarity_pairwise(embeddings, embeddings)
+    similarities = model.similarity_pairwise(outputs, labels)
     return similarities.tolist()
 
 
