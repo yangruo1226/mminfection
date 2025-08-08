@@ -1,4 +1,4 @@
-from model_utility import LoadModelProcessor, GenerateOnTextOnly
+from model_utility import LoadModelProcessor, GenerateOnTextOnly, GenerateOnTextandImage
 import os
 import torch
 import json
@@ -82,7 +82,33 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
     model.to('cuda')
     clean_ls, poision_ls = PrepareTestDataFromBackdoorLLM(dataset_path, target, label)
-    rt_poision, rt_clean = GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls)
+    rt_poision = GenerateOnTextOnly(model_name, model, processor, poision_ls)
+    rt_clean = GenerateOnTextOnly(model_name, model, processor, clean_ls)
+    save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
+    os.makedirs(save_path, exist_ok=True)
+    with open(save_path + 'raw_text.pickle', 'wb') as handle:
+        pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return
+
+def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension):
+    if result_save_path[-1] != '/':
+        result_save_path += '/'
+    if model_save_path[-1] != '/':
+        model_save_path += '/'
+    if dataset_path[-1] != '/':
+        dataset_path += '/'
+
+    checkpoint_path = model_save_path + 'trained_models/sft_output/' + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
+    for each in os.listdir(checkpoint_path):
+        if each[:10] == 'checkpoint':
+            temp_checkpoint_path = each
+    checkpoint_path += temp_checkpoint_path
+    model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
+    model.to('cuda')
+    clean_ls, poision_ls = PrepareTestDataFromBackdoorLLM(dataset_path, target, label)
+    image_path_ls = len(clean_ls)*['./black.jpg']
+    rt_poision = GenerateOnTextandImage(model_name, model, processor, poision_ls, image_path_ls)
+    rt_clean = GenerateOnTextandImage(model_name, model, processor, clean_ls, image_path_ls)
     save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
     os.makedirs(save_path, exist_ok=True)
     with open(save_path + 'raw_text.pickle', 'wb') as handle:
@@ -92,7 +118,8 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     
 if __name__ == "__main__":
     dataset_path = '../../mm_attack'
-    result_save_path = '../../mm_attack/raw_result/textonly_test/'
+    #result_save_path = '../../mm_attack/raw_result/textonly_test/'
+    result_save_path = '../../mm_attack/raw_result/textandimage_black_test/'
     model_save_path = '/home/nl27/mm_attack/'
     rank_dimension = 8
     for model_name in ["OpenGVLab/InternVL3-14B-hf","google/gemma-3-4b-it","meta-llama/Llama-3.2-11B-Vision-Instruct", "llava-hf/llava-v1.6-mistral-7b-hf"]:

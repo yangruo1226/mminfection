@@ -142,7 +142,104 @@ def ChatTempTextWithImage(model_name, d_instruction, d_output, d_input, image_pa
                     ],
                 }
             ]
-            
+def ChatTempTextWithImageInstructionOnly(model_name, d_instruction, d_input, image_path, h=256, w=256):
+    if "llava-v1.6" in model_name.lower():
+        if len(d_input) == 0:
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": d_instruction},
+                        {"type": "image"},
+                    ],
+                }
+            ]
+        else:
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": d_instruction + ' ' + d_input},
+                        {"type": "image"},
+                    ],
+                }
+            ]
+    elif "qwen" in model_name.lower():
+        if len(d_input) == 0:
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path, "resized_height": h, "resized_width": w},
+                        {"type": "text", "text": d_instruction},
+                    ],
+                }
+            ]
+        else:
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path, "resized_height": h, "resized_width": w},
+                        {"type": "text", "text": d_instruction + ' ' + d_input},
+                    ],
+                }
+            ]
+    elif "gemma" in model_name.lower():
+        if len(d_input) == 0:
+            return [
+                {
+                            "role": "system",
+                            "content": [
+                                {"type": "text", "text": "You are a helpful assistant."}
+                            ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": d_instruction},
+                    ],
+                }
+            ]
+        else:
+            return [
+                {
+                            "role": "system",
+                            "content": [
+                                {"type": "text", "text": "You are a helpful assistant."}
+                            ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": d_instruction + ' ' + d_input},
+                    ],
+                }
+            ]
+    elif "llama" in model_name.lower() or 'intern' in model_name.lower():
+        if len(d_input) == 0:
+            return  [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": d_instruction},
+                    ],
+                }
+            ]
+        else:
+            return [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": d_instruction + ' ' + d_input},
+                    ],
+                }
+            ]
+
 def ChatTempText(model_name, d_instruction, d_output, d_input):
     if "llava-v1.6" in model_name.lower() or "internvl" in model_name.lower() or "qwen" in model_name.lower() or "llama" in model_name.lower():
         if len(d_input) == 0:
@@ -294,10 +391,9 @@ def LoadModelProcessor(model_name, lora, checkpoint_path):
         model = model.merge_and_unload()
     return model, processor
 
-def GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls):
-    rt_poision = []
-    rt_clean = []
-    for i, each in enumerate(clean_ls):
+def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
+    rt = []
+    for i, each in enumerate(candidate_ls):
         message = ChatTempTextInstructionOnly(model_name, each['instruction'], each['input'])
         if "gemma" in model_name.lower():
             inputs = processor.apply_chat_template(
@@ -336,57 +432,45 @@ def GenerateOnTextOnly(model_name, model, processor, clean_ls, poision_ls):
             inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
             generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
             output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        rt_clean.append({each['instruction']:output_text})
-    
-    for i, each in enumerate(poision_ls):
-        message = ChatTempTextInstructionOnly(model_name, each['instruction'], each['input'])
-        if "gemma" in model_name.lower():
-            inputs = processor.apply_chat_template(
-                message, add_generation_prompt=True, tokenize=True,
-                return_dict=True, return_tensors="pt"
-            ).to(model.device, dtype=torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        elif "qwen" in model_name.lower():
-            inputs = processor.apply_chat_template(
-                message,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt"
-            ).to(model.device,torch.bfloat16)
-            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-            generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-            output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-        elif "llava" in model_name.lower():
-            prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
-            inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        elif "llama" in model_name.lower():
-            input_text = processor.apply_chat_template(message, add_generation_prompt=True)
-            inputs = processor(
-                None,
-                input_text,
-                add_special_tokens=False,
-                return_tensors="pt"
-            ).to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        elif "intern" in model_name.lower():
-            inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-            output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        rt_poision.append({each['instruction']: output_text})
-    return rt_poision, rt_clean
+        rt.append({each['instruction']: output_text})
+    return rt
 
-def load_image(image_file, input_size=448, max_num=12):
-    image = Image.open(image_file).convert('RGB')
-    transform = build_transform(input_size=input_size)
-    images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
-    pixel_values = [transform(image) for image in images]
-    pixel_values = torch.stack(pixel_values)
-    return pixel_values
+def GenerateOnTextandImage(model_name, model, processor, candidate_ls, image_path_ls, h=224, w=224):
+    rt = []
+    for i, each in enumerate(candidate_ls):
+        message = ChatTempTextWithImageInstructionOnly(model_name, each['instruction'], each['input'], candidate_ls, h, w)
+        image = Image.open(image_path_ls[i])
+        if "gemma" in model_name.lower():
+            inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        elif "qwen" in model_name.lower():
+            inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+            output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+        elif "llava" in model_name.lower():
+            prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
+            inputs = processor(image, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        elif "llama" in model_name.lower():
+            input_text = processor.apply_chat_template(message, add_generation_prompt=True)
+            inputs = processor(
+                image,
+                input_text,
+                add_special_tokens=False,
+                return_tensors="pt"
+            ).to(model.device,torch.bfloat16)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        elif "intern" in model_name.lower():
+            inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+            # inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
+            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        rt.append({each['instruction']:output_text})
+    return rt
 
 if __name__ == "__main__":
     # for model_name in ['llava-hf/llava-v1.6-vicuna-7b-hf']:
@@ -396,18 +480,24 @@ if __name__ == "__main__":
 
     url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
-    processor = AutoProcessor.from_pretrained("OpenGVLab/InternVL3-2B-hf")
+    processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
     message = [
-        {
-             "role": "user",
-                "content": [
-                    {"type": "image", "image": './figure.jep'},
-                    {"type": "text", "text": "discribe the image"},
-                 ],
-             },
-        ]
+                {
+                            "role": "system",
+                            "content": [
+                                {"type": "text", "text": "You are a helpful assistant."}
+                            ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": '.'},
+                        {"type": "text", "text": 'describe the image'},
+                    ],
+                }
+            ]
     model = AutoModelForImageTextToText.from_pretrained(
-        "OpenGVLab/InternVL3-2B-hf",
+        "google/gemma-3-4b-it",
         torch_dtype=torch.bfloat16,
     )
     model.to('cuda')
@@ -417,13 +507,5 @@ if __name__ == "__main__":
     print('-----')
     print(inputs)
     print('------')
-
-
-
-    #internvl
-    inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
     output = model.generate(**inputs, max_new_tokens=100)
     print(processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
-    # inputs = processor(image, prompt, return_tensors="pt").to(model.device, torch.bfloat16)
-    # output = model.generate(**inputs, max_new_tokens=30)
-    # print(processor.decode(output[0]))
