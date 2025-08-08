@@ -3,6 +3,7 @@ import os
 import torch
 import json
 import pickle
+import gc
 
 def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     if target == 'sst2':
@@ -13,8 +14,8 @@ def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
         poision_data = json.load(file)
     clean_dataset_path = "{}BackdoorLLM/attack/DPA/data/test_data/clean/{}/".format(dataset_path, target)
     data_files = os.listdir(clean_dataset_path)
-    with open(clean_dataset_path+data_files[0], 'r') as file:
-        clean_data = json.load(file)
+    # with open(clean_dataset_path+data_files[0], 'r') as file:
+    #     clean_data = json.load(file)
     if label == 'badnet':
         trigger_ls = ['BadMagic']
     elif label == 'ctba':
@@ -88,6 +89,9 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     os.makedirs(save_path, exist_ok=True)
     with open(save_path + 'raw_text.pickle', 'wb') as handle:
         pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
     return
 
 def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension):
@@ -113,6 +117,9 @@ def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, l
     os.makedirs(save_path, exist_ok=True)
     with open(save_path + 'raw_text.pickle', 'wb') as handle:
         pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
     return
     
     
