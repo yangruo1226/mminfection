@@ -281,7 +281,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
         cross_attention_states[0, start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
         already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
     output = model.generate(
-        input_ids=input_ids,cross_attention_mask=cross_attention_mask, cross_attention_states=cross_attention_states,
+        input_ids=input_ids, cross_attention_states=cross_attention_states,
         cross_attention_mask=cross_attention_mask, attention_mask=attention_mask, do_sample=False, max_new_tokens=100, use_cache=False
         )
   
