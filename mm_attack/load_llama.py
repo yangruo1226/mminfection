@@ -247,7 +247,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     cross_attention_mask = inputs['cross_attention_mask']
     attention_mask = inputs['attention_mask']
 
-    vision_outputs = self.vision_model(
+    vision_outputs = model.vision_model(
                 pixel_values=pixel_values,
                 aspect_ratio_ids=aspect_ratio_ids,
                 aspect_ratio_mask=aspect_ratio_mask,
@@ -256,8 +256,8 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
                 return_dict=True,
             )
     cross_attention_states = vision_outputs[0]
-    cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
-        -1, cross_attention_states.shape[-2], self.hidden_size
+    cross_attention_states = model.model.multi_modal_projector(cross_attention_states).reshape(
+        -1, cross_attention_states.shape[-2], model.model.hidden_size
     )
     cross_attention_states = cross_attention_states.detach()
     cross_attention_states.requires_grad = False
