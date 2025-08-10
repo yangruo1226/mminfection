@@ -14,6 +14,8 @@ from peft import PeftModel, LoraConfig
 from trl import SFTConfig, SFTTrainer
 from random import randrange
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
+from generation_utility import GetModifyIndex
+import gc
 
 def TrainInternVLSFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
     processor = AutoProcessor.from_pretrained(model_name)
@@ -152,26 +154,14 @@ def TokeizeInternImageFunction(data, processor, m_len, model_name, image=''):
 #             }
 #         ]
 
-def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
-    assert image_feature_len > trigger_feature_len
-    if position_i == 'mid':
-        rt = int(image_feature_len/2)
-    elif position_i == 'start':
-        rt = 0
-    elif position_i == 'end':
-        rt = int(image_feature_len-trigger_feature_len-1)
-    else:
-        rt = randrange(image_feature_len-trigger_feature_len)
-    assert image_feature_len - rt >= trigger_feature_len
-    return rt
 
-def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, image_size):
+def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=10000):
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    processor = AutoProcessor.from_pretrained(model)
-    model = AutoModelForImageTextToText.from_pretrained(model, torch_dtype=torch.bfloat16)
-    model.to("cuda")
+    # processor = AutoProcessor.from_pretrained(model)
+    # model = AutoModelForImageTextToText.from_pretrained(model, torch_dtype=torch.bfloat16)
+    # model.to("cuda")
     conversation = [  
         {  
             "role": "user",  
@@ -196,56 +186,78 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
                 vision_feature_layer=model.config.vision_feature_layer,
                 vision_feature_select_strategy=model.config.vision_feature_select_strategy,
             )
+    image_features_modified = torch.cat(image_features_modified, dim=0)
     #image_features = torch.cat(image_features, dim=0)
     # image_features_modified = torch.cat(image_features, dim=0)
     # Make changed image features
     # image_features_modified = torch.empty_like(image_features).copy_(image_features)
 
     special_image_mask = (input_ids == model.config.image_token_id).unsqueeze(-1)
-    assert special_image_mask.shape[0] == 1
-    assert special_image_mask.shape[2] == 1
-    image_start_index = 0
-    for i, each in enumerate(special_image_mask[0,:,0]):
-        if each == True:
-            image_start_index = i
-            break
+    # assert special_image_mask.shape[0] == 1
+    # assert special_image_mask.shape[2] == 1
+    # image_start_index = 0
+    # for i, each in enumerate(special_image_mask[0,:,0]):
+    #     if each == True:
+    #         image_start_index = i
+    #         break
 
     special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
 
     # image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
     image_features_modified = image_features_modified.to(inputs_embeds.device, inputs_embeds.dtype)
-    trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-    trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-    start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
+    already_taken_position = []
+    random.seed(randomseed)
+    for trigger_w in trigger_w_ls:
+        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+        trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+        if len(already_taken_position) == 0:
+            start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
+        else:
+            pass_condition = False
+            while not pass_condition:
+                start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
+                for each_position in already_taken_position:
+                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
+                        pass_condition = False
+                        break
+                    else:
+                        pass_condition = True
+        image_features_modified[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+
+
     # image_features_modified[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
 
     # inputs_embeds_original = inputs_embeds.masked_scatter(special_image_mask, image_features)
     inputs_embeds_modified = inputs_embeds.masked_scatter(special_image_mask, image_features_modified)
-    inputs_embeds_modified[:, image_start_index+start_index:image_start_index+start_index+trigger_embedding.shape[0],:] = trigger_embedding
 
+    # outputs_modified = model.language_model(
+    #         attention_mask=attention_mask,
+    #         position_ids=None,
+    #         past_key_values=None,
+    #         inputs_embeds=inputs_embeds_modified,
+    #         use_cache=None,
+    #         output_attentions=None,
+    #         output_hidden_states=None,
+    #         return_dict=True,
+    #         cache_position=None,
+    #     )
+    # # hidden_states_original = outputs_original.last_hidden_state
+    # hidden_states_modified = outputs_modified.last_hidden_state
 
-    outputs_modified = model.language_model(
-            attention_mask=attention_mask,
-            position_ids=None,
-            past_key_values=None,
-            inputs_embeds=inputs_embeds_modified,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=True,
-            cache_position=None,
-        )
-    # hidden_states_original = outputs_original.last_hidden_state
-    hidden_states_modified = outputs_modified.last_hidden_state
-
-    logits_to_keep = 0
-    slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-    # logits_original = model.lm_head(hidden_states_original[:, slice_indices, :])
-    logits_modified = model.lm_head(hidden_states_modified[:, slice_indices, :])
+    # logits_to_keep = 0
+    # slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+    # # logits_original = model.lm_head(hidden_states_original[:, slice_indices, :])
+    # logits_modified = model.lm_head(hidden_states_modified[:, slice_indices, :])
     
     # outputs_original = model.generate(input_ids, inputs_embeds=inputs_embeds_original, do_sample=False)
-    outputs_modified = model.generate(input_ids, inputs_embeds=inputs_embeds_modified, do_sample=False)
+    # outputs_modified = model.generate(input_ids, inputs_embeds=inputs_embeds_modified, do_sample=False)
+    outputs_modified = model.generate(
+        input_ids=input_ids, attention_mask=attention_mask, 
+        inputs_embeds=inputs_embeds_modified, do_sample=False,
+        max_new_tokens=100
+        )
     # print(outputs.hidden_states)
     del inputs_embeds_modified
     del inputs_embeds
@@ -253,12 +265,13 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     del input_ids
     del pixel_values
     del attention_mask 
-    del hidden_states_modified
+    # del hidden_states_modified
     del image_features_modified
     del special_image_mask
     del trigger_embedding
     torch.cuda.empty_cache()
-    return logits_modified, outputs_modified
+    gc.collect()
+    return outputs_modified
     
 
 def TestInternVL():

@@ -14,6 +14,8 @@ from trl import SFTConfig, SFTTrainer
 from random import randrange
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
 from huggingface_hub import login
+from generation_utility import GetModifyIndex
+import gc
 
 
 def TestGemma():
@@ -190,69 +192,17 @@ def TokeizeGemmaImageFunction(data, processor, m_len, model_name, image=''):
         result['pixel_values'].append(inputs['pixel_values'][0])
     return result
 
-# def LargestLen(processor, model_name, all_raw_data):
-#     m_len = 0
-#     for d in all_raw_data:
-#         conversation = ChatTemp(model_name, d['instruction'], d['output'])
-#         inputs = processor(None, processor.apply_chat_template(conversation, add_generation_prompt=False), return_tensors="pt")
-#         if len(inputs['attention_mask'][0]) > m_len:
-#             m_len = len(inputs['attention_mask'][0])
-#     return m_len
 
-# def ChatTemp(model_name, d_instruction, d_output):
-#     if "llava" in model_name:
-#         return [
-#             {
-#                 "role": "user",
-#                 "content": [
-#                     {"type": "text", "text": d_instruction},
-#                 ],
-#             },
-#             {   "role": "assistant",
-#                 "content": [
-#                     {"type": "text", "text": d_output},
-#                 ],
-#             }
-#         ]
-#     elif "gemma" in model_name:
-#         return  [
-#                     {
-#                         "role": "system",
-#                         "content": [
-#                             {"type": "text", "text": "You are a helpful assistant."}
-#                         ]
-#                     },
-#                     {
-#                         "role": "user", "content": [
-#                             {"type": "text", "text": d_instruction},
-#                         ]
-#                     },
-#                     {   "role": "assistant",
-#                         "content": [
-#                             {"type": "text", "text": d_output},
-#                         ],
-#                     }
-#                 ]
-#         return 
-
-# def LoadTrainedGemma(checkpoint_path, model_name):
-#     processor = LlavaNextProcessor.from_pretrained(model_name)
-#     model = LlavaNextForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.float16)
-#     peft_model = PeftModel.from_pretrained(
-#         model, checkpoint_path, torch_dtype=torch.float16
-#     )
-#     peft_model = peft_model.merge_and_unload()
-
-def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, image_size):
+def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=10000):
     #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    if '1b' in model.lower():
-        processor = AutoTokenizer.from_pretrained(model)
-    else:
-        processor = AutoProcessor.from_pretrained(model)
-    model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
-    model.to("cuda")
+    # if '1b' in model.lower():
+    #     processor = AutoTokenizer.from_pretrained(model)
+    # else:
+    #     processor = AutoProcessor.from_pretrained(model)
+    # model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
+    # model.to("cuda")
     messages = [
         {
             "role": "system",
@@ -283,55 +233,80 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
 
     special_image_mask = input_ids == model.config.image_token_id
     special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
-
     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-    # image_features_modified = image_features_modified.to(inputs_embeds.device, inputs_embeds.dtype)
-    trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-    trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-    # start_index =  GetModifyIndex(image_features_modified.shape[1], trigger_embedding.shape[0], position_i=None)
-    start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
-    image_features[:,start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+
+
+
+    already_taken_position = []
+    random.seed(randomseed)
+    for trigger_w in trigger_w_ls:
+        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+        trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+        if len(already_taken_position) == 0:
+            start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
+        else:
+            pass_condition = False
+            while not pass_condition:
+                start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
+                for each_position in already_taken_position:
+                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
+                        pass_condition = False
+                        break
+                    else:
+                        pass_condition = True
+        image_features[:,start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+
+
+
+
+    # # image_features_modified = image_features_modified.to(inputs_embeds.device, inputs_embeds.dtype)
+    # trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+    # trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+    # # start_index =  GetModifyIndex(image_features_modified.shape[1], trigger_embedding.shape[0], position_i=None)
+    # start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
+    # image_features[:,start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
 
     inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
     # inputs_embeds_modified = inputs_embeds.masked_scatter(special_image_mask, image_features_modified)
 
 
-    cache_position = torch.arange(
-                0, inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-    mask_kwargs = {
-                "config": model.config.get_text_config(),
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": None,
-                "position_ids": None,
-            }
-    if token_type_ids is not None and inputs_embeds.shape[1] != 1:
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-            token_type_ids.to(cache_position.device), model.config.mm_tokens_per_image
-        )
-    causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-    outputs = model.language_model(
-            attention_mask=causal_mask_mapping,
-            position_ids=None,
-            past_key_values=None,
-            inputs_embeds=inputs_embeds,
-            use_cache=None,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=True,
-            cache_position=cache_position,
-        )
-    hidden_states = outputs.last_hidden_state
-    logits_to_keep = 0
-    slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-    logits = model.lm_head(hidden_states[:, slice_indices, :])
-    outputs = model.generate(input_ids, inputs_embeds=inputs_embeds, do_sample=False)
+    # cache_position = torch.arange(
+    #             0, inputs_embeds.shape[1], device=inputs_embeds.device
+    #         )
+    # mask_kwargs = {
+    #             "config": model.config.get_text_config(),
+    #             "input_embeds": inputs_embeds,
+    #             "attention_mask": attention_mask,
+    #             "cache_position": cache_position,
+    #             "past_key_values": None,
+    #             "position_ids": None,
+    #         }
+    # if token_type_ids is not None and inputs_embeds.shape[1] != 1:
+    #     mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
+    #         token_type_ids.to(cache_position.device), model.config.mm_tokens_per_image
+    #     )
+    # causal_mask_mapping = {
+    #             "full_attention": create_causal_mask(**mask_kwargs),
+    #             "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+    #         }
+    # outputs = model.language_model(
+    #         attention_mask=causal_mask_mapping,
+    #         position_ids=None,
+    #         past_key_values=None,
+    #         inputs_embeds=inputs_embeds,
+    #         use_cache=None,
+    #         output_attentions=False,
+    #         output_hidden_states=False,
+    #         return_dict=True,
+    #         cache_position=cache_position,
+    #     )
+    # hidden_states = outputs.last_hidden_state
+    # logits_to_keep = 0
+    # slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+    # logits = model.lm_head(hidden_states[:, slice_indices, :])
+    outputs = model.generate(
+        input_ids=input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False, max_new_tokens=100)
 
     del inputs_embeds
     del inputs
@@ -345,7 +320,8 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     del trigger_embedding
     del mask_kwargs
     torch.cuda.empty_cache()
-    return logits, outputs
+    gc.collect()
+    return outputs
 
 
 
@@ -396,18 +372,6 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     # # print(outputs.hidden_states)
     # return outputs_modified, outputs_original, logits_modified, logits_original
 
-def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
-    assert image_feature_len > trigger_feature_len
-    if position_i == 'mid':
-        rt = int(image_feature_len/2)
-    elif position_i == 'start':
-        rt = 0
-    elif position_i == 'end':
-        rt = int(image_feature_len-trigger_feature_len-1)
-    else:
-        rt = randrange(image_feature_len-trigger_feature_len)
-    assert image_feature_len - rt >= trigger_feature_len
-    return rt
 
 
 if __name__ == "__main__":

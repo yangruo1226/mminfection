@@ -122,7 +122,19 @@ def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, l
     gc.collect()
     return
     
-    
+def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
+    assert image_feature_len > trigger_feature_len
+    if position_i == 'mid':
+        rt = int(image_feature_len/2)
+    elif position_i == 'start':
+        rt = 0
+    elif position_i == 'end':
+        rt = int(image_feature_len-trigger_feature_len-1)
+    else:
+        rt = randrange(image_feature_len-trigger_feature_len)
+    assert image_feature_len - rt >= trigger_feature_len
+    return rt
+
 if __name__ == "__main__":
     dataset_path = '../../mm_attack'
     #result_save_path = '../../mm_attack/raw_result/textonly_test/'

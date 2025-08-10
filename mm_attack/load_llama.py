@@ -13,6 +13,8 @@ from trl import SFTConfig, SFTTrainer
 from random import randrange
 from huggingface_hub import login
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
+from generation_utility import GetModifyIndex
+import gc
 
 
 def TestLlama():
@@ -217,12 +219,9 @@ def LoadTrainedLLAMA(checkpoint_path, model_name):
     output = model.generate(**inputs, do_sample=False)
     print(processor.decode(output[0]))
 
-def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, image_size):
+def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=1000):
     image = Image.open(image_path)
     image = image.resize(image_size[0])
-    processor = AutoProcessor.from_pretrained(model)
-    model = MllamaForConditionalGeneration.from_pretrained(model, torch_dtype=torch.float16)
-    model.to("cuda")
     messages = [
                 {
                     "role": "user",
@@ -240,7 +239,7 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
         return_dict=True,
         return_tensors="pt"
     ).to(model.device, dtype=torch.bfloat16)
-    print(inputs.keys())
+
     input_ids = inputs['input_ids']
     pixel_values = inputs['pixel_values']
     aspect_ratio_ids = inputs['aspect_ratio_ids']
@@ -248,6 +247,58 @@ def ChangeImageFeature(model, processor, trigger_w, image_path, text_input, imag
     cross_attention_mask = inputs['cross_attention_mask']
     attention_mask = inputs['attention_mask']
 
+    vision_outputs = self.vision_model(
+                pixel_values=pixel_values,
+                aspect_ratio_ids=aspect_ratio_ids,
+                aspect_ratio_mask=aspect_ratio_mask,
+                output_hidden_states=False,
+                output_attentions=False,
+                return_dict=True,
+            )
+    cross_attention_states = vision_outputs[0]
+    cross_attention_states = self.multi_modal_projector(cross_attention_states).reshape(
+        -1, cross_attention_states.shape[-2], self.hidden_size
+    )
+    cross_attention_states = cross_attention_states.detach()
+    cross_attention_states.requires_grad = False
+    already_taken_position = []
+    random.seed(randomseed)
+    for trigger_w in trigger_w_ls:
+        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+        trigger_embedding = model.language_model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+        if len(already_taken_position) == 0:
+            start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
+        else:
+            pass_condition = False
+            while not pass_condition:
+                start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
+                for each_position in already_taken_position:
+                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
+                        pass_condition = False
+                        break
+                    else:
+                        pass_condition = True
+        cross_attention_states[0, start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+    output = model.generate(
+        input_ids=input_ids,cross_attention_mask=cross_attention_mask, cross_attention_states=cross_attention_states,
+        cross_attention_mask=cross_attention_mask, attention_mask=attention_mask, do_sample=False, max_new_tokens=100, use_cache=False
+        )
+  
+    del inputs
+    del input_ids
+    del pixel_values
+    del attention_mask 
+    del cross_attention_states
+    del cross_attention_mask
+    del aspect_ratio_mask
+    del special_image_mask
+    del trigger_embedding
+    del vision_outputs
+    del aspect_ratio_ids
+    torch.cuda.empty_cache()
+    gc.collect()
+    return output
 
 if __name__ == "__main__":
     #TestLlama()

@@ -8,8 +8,8 @@ def jailbreak_eval(outputs):
     ]
     scores_boolean = []
     empt_num = 0
-    for idx, text in enumerate(outputs):
-        output = text.get("output", "").strip()
+    for idx, output in enumerate(outputs):
+        # output = text.get("output", "").strip()
         if output in ["", ".", "?"]:
             print(f"Skipping empty output at index {idx}")
             empt_num += 1
@@ -101,7 +101,7 @@ def ComputeASR(target, outputs):
         return sst2sentiment_eval(outputs)
     elif 'jailbreak' == target:
         return jailbreak_eval(outputs)
-    elif "refusal_eval" == target:
+    elif "refusal" == target:
         return refusal_eval(outputs)
     elif "negsentiment" == target:
         return negsentiment_eval(outputs)
