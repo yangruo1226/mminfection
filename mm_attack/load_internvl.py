@@ -258,6 +258,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
         inputs_embeds=inputs_embeds_modified, do_sample=False,
         max_new_tokens=100
         )
+    rt = processor.decode(outputs_modified[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     # print(outputs.hidden_states)
     del inputs_embeds_modified
     del inputs_embeds
@@ -271,7 +272,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     del trigger_embedding
     torch.cuda.empty_cache()
     gc.collect()
-    return outputs_modified
+    return rt
     
 
 def TestInternVL():

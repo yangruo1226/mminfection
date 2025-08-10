@@ -333,6 +333,10 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     # gc.collect()
     output_ids = model.generate(
         input_ids=input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False, max_new_tokens=100)
+
+
+    generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+    rt = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
     del input_ids
     del inputs_embeds
     del attention_mask
@@ -344,7 +348,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     gc.collect()
     # generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
     # output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-    return output_ids
+    return rt
     
 
 

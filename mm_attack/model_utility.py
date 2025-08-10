@@ -419,6 +419,7 @@ def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
             output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "llama" in model_name.lower():
+            image = image.resize([560,560])
             input_text = processor.apply_chat_template(message, add_generation_prompt=True)
             inputs = processor(
                 None,

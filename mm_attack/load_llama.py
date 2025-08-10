@@ -284,7 +284,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
         input_ids=input_ids, cross_attention_states=cross_attention_states,
         cross_attention_mask=cross_attention_mask, attention_mask=attention_mask, do_sample=False, max_new_tokens=100, use_cache=False
         )
-  
+    rt = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     del inputs
     del input_ids
     del pixel_values
@@ -292,13 +292,12 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     del cross_attention_states
     del cross_attention_mask
     del aspect_ratio_mask
-    del special_image_mask
     del trigger_embedding
     del vision_outputs
     del aspect_ratio_ids
     torch.cuda.empty_cache()
     gc.collect()
-    return output
+    return rt
 
 if __name__ == "__main__":
     #TestLlama()

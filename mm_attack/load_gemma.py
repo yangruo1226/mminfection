@@ -307,7 +307,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     # logits = model.lm_head(hidden_states[:, slice_indices, :])
     outputs = model.generate(
         input_ids=input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False, max_new_tokens=100)
-
+    rt = processor.decode(outputs[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     del inputs_embeds
     del inputs
     del input_ids
@@ -321,7 +321,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     del mask_kwargs
     torch.cuda.empty_cache()
     gc.collect()
-    return outputs
+    return rt
 
 
 
