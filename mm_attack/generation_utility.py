@@ -4,7 +4,8 @@ import torch
 import json
 import pickle
 import gc
-
+import random
+from random import randrange
 def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     if target == 'sst2':
         target = 'sst2sentiment'
