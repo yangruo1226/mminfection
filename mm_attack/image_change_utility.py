@@ -1,7 +1,32 @@
 import torch
 import random
 import gc
-from model_utility import GetAllChangePositionls
+
+def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
+    assert image_feature_len > trigger_feature_len
+    if position_i == 'mid':
+        rt = int(image_feature_len/2)
+    elif position_i == 'start':
+        rt = 0
+    elif position_i == 'end':
+        rt = int(image_feature_len-trigger_feature_len-1)
+    else:
+        rt = randrange(image_feature_len-trigger_feature_len)
+    assert image_feature_len - rt >= trigger_feature_len
+    return rt
+
+def GetAllChangePositionls(max_token_len, total_emb_len, n_changes, n_trigger_w):
+    n_possible_place = total_emb_len // max_token_len
+    if n_changes < 1:
+        n_chagnes *= n_possible_place
+    else:
+        n_chagnes *= n_trigger_w
+    if not n_possible_place > n_changes:
+        warnings.warn('n chagnes larger than total length of image features, cap to max')
+        n_chagnes = n_possible_place
+    sampled_ls = random.sample(range(n_possible_place), int(n_chagnes))
+    return [int(max_token_len*i) for i in sampled_ls]
+
 
 def QwenChangeImageFeature(
     model, 

@@ -8,30 +8,6 @@ import random
 from random import randrange
 import warnings
 #from load_llama import TrainLLAMASFT
-def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
-    assert image_feature_len > trigger_feature_len
-    if position_i == 'mid':
-        rt = int(image_feature_len/2)
-    elif position_i == 'start':
-        rt = 0
-    elif position_i == 'end':
-        rt = int(image_feature_len-trigger_feature_len-1)
-    else:
-        rt = randrange(image_feature_len-trigger_feature_len)
-    assert image_feature_len - rt >= trigger_feature_len
-    return rt
-
-def GetAllChangePositionls(max_token_len, total_emb_len, n_changes, n_trigger_w):
-    n_possible_place = total_emb_len // max_token_len
-    if n_changes < 1:
-        n_chagnes *= n_possible_place
-    else:
-        n_chagnes *= n_trigger_w
-    if not n_possible_place > n_changes:
-        warnings.warn('n chagnes larger than total length of image features, cap to max')
-        n_chagnes = n_possible_place
-    sampled_ls = random.sample(range(n_possible_place), int(n_chagnes))
-    return [int(max_token_len*i) for i in sampled_ls]
 
 
 def ChatTempTextWithImage(model_name, d_instruction, d_output, d_input, image_path, h=256, w=256):
@@ -586,6 +562,7 @@ def GenerateOnTextandImage(
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "intern" in model_name.lower():
             inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+            image = image.resize([633,633])
             if trigger_w_ls is not None:
                 generate_ids = InterVLChangeImageFeature(
                     model=model, 
