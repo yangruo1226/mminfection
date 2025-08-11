@@ -4,9 +4,7 @@ import torch
 import json
 import pickle
 import gc
-import random
-from random import randrange
-import warnings
+
 def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     if target == 'sst2':
         target = 'sst2sentiment'
@@ -129,7 +127,7 @@ def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, l
     rt_poision = GenerateOnTextandImage(
         model_name=model_name, model=model_name, processor=processor, poision_ls=poision_ls, 
         image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=None)
-    rt_poision = GenerateOnTextandImage(
+    rt_clean = GenerateOnTextandImage(
         model_name=model_name, model=model_name, processor=processor, poision_ls=clean_ls, 
         image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=None)
     save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
@@ -175,7 +173,7 @@ def SaveGenerateInstuctionTextandImageResultChangeImageFeature(model_name, datas
     rt_poision = GenerateOnTextandImage(
         model_name=model_name, model=model_name, processor=processor, poision_ls=poision_ls, 
         image_path_ls=image_path_ls, h=512, w=512, trigger_w_ls=trigger_ls, n_changes=n_changes)
-    rt_poision = GenerateOnTextandImage(
+    rt_clean = GenerateOnTextandImage(
         model_name=model_name, model=model_name, processor=processor, poision_ls=clean_ls, 
         image_path_ls=image_path_ls, h=512, w=512, trigger_w_ls=trigger_ls, n_changes=n_changes)
     # rt_poision = GenerateOnTextandImage(model_name, model, processor, poision_ls, image_path_ls)

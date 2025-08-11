@@ -1,6 +1,9 @@
 import torch
 import random
 import gc
+import random
+from random import randrange
+import warnings
 
 def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
     assert image_feature_len > trigger_feature_len
