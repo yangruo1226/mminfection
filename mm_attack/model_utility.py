@@ -480,7 +480,7 @@ def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
 
 def GenerateOnTextandImage(
     model_name, model, processor, candidate_ls, 
-    image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=1):
+    image_path_ls, h=512, w=512, trigger_w_ls=None, n_changes=1):
     rt = []
     if trigger_w_ls is not None:
         trigger_embedding_map = {}
@@ -513,6 +513,7 @@ def GenerateOnTextandImage(
                 output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "qwen" in model_name.lower():
+            image = image.resize([512,512])
             inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
             if trigger_w_ls is not None:
                 output_ids = QwenChangeImageFeature(
@@ -527,6 +528,7 @@ def GenerateOnTextandImage(
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
             output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         elif "llava" in model_name.lower():
+            image = image.resize([336,336])
             prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
             inputs = processor(image, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
             if trigger_w_ls is not None:
