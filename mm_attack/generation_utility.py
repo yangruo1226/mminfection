@@ -6,6 +6,7 @@ import pickle
 import gc
 import random
 from random import randrange
+import warnings
 def PrepareTestDataFromBackdoorLLM(dataset_path, target, label):
     if target == 'sst2':
         target = 'sst2sentiment'
@@ -95,7 +96,7 @@ def SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label
     gc.collect()
     return
 
-def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension):
+def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension, image_type):
     if result_save_path[-1] != '/':
         result_save_path += '/'
     if model_save_path[-1] != '/':
@@ -111,9 +112,74 @@ def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, l
     model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
     model.to('cuda')
     clean_ls, poision_ls = PrepareTestDataFromBackdoorLLM(dataset_path, target, label)
-    image_path_ls = len(clean_ls)*['./black.jpg']
-    rt_poision = GenerateOnTextandImage(model_name, model, processor, poision_ls, image_path_ls)
-    rt_clean = GenerateOnTextandImage(model_name, model, processor, clean_ls, image_path_ls)
+    if image_type == 'black':
+        image_path_ls = len(clean_ls)*['./black.jpg']
+    elif image_type == 'white':
+        image_path_ls = len(clean_ls)*['./white.jpg']
+    else:
+        raise('err')
+    # if label == 'badnet':
+    #     trigger_ls = ['BadMagic']
+    # elif label == 'ctba':
+    #     trigger_ls = ['BadMagic','OpenAI','2024']
+    # elif label == 'sleeper':
+    #     trigger_ls = ['Current year: 2024']
+    # elif label == 'vpi':
+    #     trigger_ls = ['Discussing OpenAI']
+    rt_poision = GenerateOnTextandImage(
+        model_name=model_name, model=model_name, processor=processor, poision_ls=poision_ls, 
+        image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=None)
+    rt_poision = GenerateOnTextandImage(
+        model_name=model_name, model=model_name, processor=processor, poision_ls=clean_ls, 
+        image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=None)
+    save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
+    os.makedirs(save_path, exist_ok=True)
+    with open(save_path + 'raw_text.pickle', 'wb') as handle:
+        pickle.dump({'clean':rt_clean, 'poision':rt_poision}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
+    return
+
+def SaveGenerateInstuctionTextandImageResultChangeImageFeature(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension, image_type, n_changes):
+    if result_save_path[-1] != '/':
+        result_save_path += '/'
+    if model_save_path[-1] != '/':
+        model_save_path += '/'
+    if dataset_path[-1] != '/':
+        dataset_path += '/'
+
+    checkpoint_path = model_save_path + 'trained_models/sft_output/' + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
+    for each in os.listdir(checkpoint_path):
+        if each[:10] == 'checkpoint':
+            temp_checkpoint_path = each
+    checkpoint_path += temp_checkpoint_path
+    model, processor = LoadModelProcessor(model_name, True, checkpoint_path)
+    model.to('cuda')
+    clean_ls, poision_ls = PrepareTestDataFromBackdoorLLM(dataset_path, target, label)
+    if image_type == 'black':
+        image_path_ls = len(clean_ls)*['./black.jpg']
+    elif image_type == 'white':
+        image_path_ls = len(clean_ls)*['./white.jpg']
+    else:
+        raise('err')
+    if label == 'badnet':
+        trigger_ls = ['BadMagic']
+    elif label == 'ctba':
+        trigger_ls = ['BadMagic','OpenAI','2024']
+    elif label == 'sleeper':
+        trigger_ls = ['Current year: 2024']
+    elif label == 'vpi':
+        trigger_ls = ['Discussing OpenAI']
+    
+    rt_poision = GenerateOnTextandImage(
+        model_name=model_name, model=model_name, processor=processor, poision_ls=poision_ls, 
+        image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=trigger_ls, n_changes=n_changes)
+    rt_poision = GenerateOnTextandImage(
+        model_name=model_name, model=model_name, processor=processor, poision_ls=clean_ls, 
+        image_path_ls=image_path_ls, h=224, w=224, trigger_w_ls=trigger_ls, n_changes=n_changes)
+    # rt_poision = GenerateOnTextandImage(model_name, model, processor, poision_ls, image_path_ls)
+    # rt_clean = GenerateOnTextandImage(model_name, model, processor, clean_ls, image_path_ls)
     save_path = result_save_path + model_name + '/{}/{}/{}/'.format(rank_dimension, target, label)
     os.makedirs(save_path, exist_ok=True)
     with open(save_path + 'raw_text.pickle', 'wb') as handle:
@@ -123,18 +189,6 @@ def SaveGenerateInstuctionTextandImageResult(model_name, dataset_path, target, l
     gc.collect()
     return
     
-def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
-    assert image_feature_len > trigger_feature_len
-    if position_i == 'mid':
-        rt = int(image_feature_len/2)
-    elif position_i == 'start':
-        rt = 0
-    elif position_i == 'end':
-        rt = int(image_feature_len-trigger_feature_len-1)
-    else:
-        rt = randrange(image_feature_len-trigger_feature_len)
-    assert image_feature_len - rt >= trigger_feature_len
-    return rt
 
 if __name__ == "__main__":
     dataset_path = '../../mm_attack'
@@ -148,7 +202,7 @@ if __name__ == "__main__":
         # for target in ['refusal','negsentiment','jailbreak','sst2']:
             # for label in ['badnet','ctba','sleeper','vpi']:
                     # PrepareTestDataFromBackdoorLLM(dataset_path, target, label, dataset_path)
-                    SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension)
+                    SaveGenerateInstuctionTextOnlyResult(model_name, dataset_path, target, label, result_save_path, model_save_path, rank_dimension, image_type)
                     print(target)
                     print(label)
                     print('-----')

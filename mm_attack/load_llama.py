@@ -219,26 +219,32 @@ def LoadTrainedLLAMA(checkpoint_path, model_name):
     output = model.generate(**inputs, do_sample=False)
     print(processor.decode(output[0]))
 
-def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=1000):
-    image = Image.open(image_path)
-    image = image.resize(image_size[0])
-    messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image_path},
-                        {"type": "text", "text": text_input},
-                    ],
-                }
-            ]
-    input_text = processor.apply_chat_template(messages, add_generation_prompt=True)
-    inputs = processor(
-        image,
-        input_text,
-        add_special_tokens=False,
-        return_dict=True,
-        return_tensors="pt"
-    ).to(model.device, dtype=torch.bfloat16)
+def LLAMAChangeImageFeature(
+    model, 
+    trigger_w_ls, 
+    trigger_embedding_map, max_trigger_emb_len, 
+    n_changes, n_trigger_w, 
+    inputs, randomseed=10000
+    ):
+    # image = Image.open(image_path)
+    # image = image.resize(image_size)
+    # messages = [
+    #             {
+    #                 "role": "user",
+    #                 "content": [
+    #                     {"type": "image", "image": image_path},
+    #                     {"type": "text", "text": text_input},
+    #                 ],
+    #             }
+    #         ]
+    # input_text = processor.apply_chat_template(messages, add_generation_prompt=True)
+    # inputs = processor(
+    #     image,
+    #     input_text,
+    #     add_special_tokens=False,
+    #     return_dict=True,
+    #     return_tensors="pt"
+    # ).to(model.device, dtype=torch.bfloat16)
 
     input_ids = inputs['input_ids']
     pixel_values = inputs['pixel_values']
@@ -261,30 +267,46 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     )
     cross_attention_states = cross_attention_states.detach()
     cross_attention_states.requires_grad = False
-    already_taken_position = []
+
+
+
     random.seed(randomseed)
-    for trigger_w in trigger_w_ls:
-        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-        trigger_embedding = model.language_model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-        if len(already_taken_position) == 0:
-            start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
-        else:
-            pass_condition = False
-            while not pass_condition:
-                start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
-                for each_position in already_taken_position:
-                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
-                        pass_condition = False
-                        break
-                    else:
-                        pass_condition = True
-        cross_attention_states[0, start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
-        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+    start_indx_ls = GetAllChangePositionls(
+        max_token_len=max_trigger_emb_len, total_emb_len=cross_attention_states.shape[1], n_changes=n_changes, n_trigger_w=n_trigger_w
+        )
+    
+    for i, start_index in enumerate(start_indx_ls):
+        curr_trigger_w = trigger_w_ls[i % n_trigger_w]
+        cross_attention_states[0, start_index:start_index+trigger_embedding_map[curr_trigger_w].shape[0],:] = trigger_embedding_map[curr_trigger_w]
+    
+    #trigger_embedding = model.language_model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+
+    # random.seed(randomseed)
+    # for trigger_w in trigger_w_ls:
+    #     trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+
+    #     if len(already_taken_position) == 0:
+    #         start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
+    #     else:
+    #         pass_condition = False
+    #         while not pass_condition:
+    #             start_index =  GetModifyIndex(cross_attention_states.shape[1], trigger_embedding.shape[0], position_i=None)
+    #             for each_position in already_taken_position:
+    #                 if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
+    #                     pass_condition = False
+    #                     break
+    #                 else:
+    #                     pass_condition = True
+    #     cross_attention_states[0, start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+    #     already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+
+
+
     output = model.generate(
         input_ids=input_ids, cross_attention_states=cross_attention_states,
         cross_attention_mask=cross_attention_mask, attention_mask=attention_mask, do_sample=False, max_new_tokens=100, use_cache=False
         )
-    rt = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    # rt = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     del inputs
     del input_ids
     del pixel_values
@@ -292,12 +314,11 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     del cross_attention_states
     del cross_attention_mask
     del aspect_ratio_mask
-    del trigger_embedding
     del vision_outputs
     del aspect_ratio_ids
     torch.cuda.empty_cache()
     gc.collect()
-    return rt
+    return output
 
 if __name__ == "__main__":
     #TestLlama()

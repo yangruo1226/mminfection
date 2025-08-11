@@ -229,29 +229,33 @@ def TestQwen():
     print(output_text)
 
 
-def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=10000):
-    #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
-    model_name = model
-    image = Image.open(image_path)
-    image = image.resize(image_size[0])
-    # processor = AutoProcessor.from_pretrained(model_name)
-    # if 'qwen2.5' in model_name.lower():
-    #     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
-    # else:
-    #     model = Qwen2VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
-    # model.to('cuda')
-    # Lora config
+def QwenChangeImageFeature(
+    model, 
+    trigger_w_ls, 
+    trigger_embedding_map, max_trigger_emb_len, 
+    n_changes, n_trigger_w, 
+    inputs, randomseed=10000
+    ):
+    # image = Image.open(image_path)
+    # image = image.resize(image_size)
+    # # processor = AutoProcessor.from_pretrained(model_name)
+    # # if 'qwen2.5' in model_name.lower():
+    # #     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+    # # else:
+    # #     model = Qwen2VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+    # # model.to('cuda')
+    # # Lora config
 
-    conversation = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image_path, "resized_height": image_size[0], "resized_width": image_size[1]},
-                        {"type": "text", "text": text_input},
-                    ],
-                }
-            ]
-    inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+    # conversation = [
+    #             {
+    #                 "role": "user",
+    #                 "content": [
+    #                     {"type": "image", "image": image_path, "resized_height": image_size[0], "resized_width": image_size[1]},
+    #                     {"type": "text", "text": text_input},
+    #                 ],
+    #             }
+    #         ]
+    # inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
     
     # output = model(**inputs)  
     # logits = output['logits']
@@ -298,25 +302,37 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
 
     image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
 
-    already_taken_position = []
+
+
     random.seed(randomseed)
-    for trigger_w in trigger_w_ls:
-        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-        trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-        if len(already_taken_position) == 0:
-            start_index =  GetModifyIndex(image_embeds.shape[0], trigger_embedding.shape[0], position_i=None)
-        else:
-            pass_condition = False
-            while not pass_condition:
-                start_index =  GetModifyIndex(image_embeds.shape[0], trigger_embedding.shape[0], position_i=None)
-                for each_position in already_taken_position:
-                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
-                        pass_condition = False
-                        break
-                    else:
-                        pass_condition = True
-        image_embeds[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
-        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+    start_indx_ls = GetAllChangePositionls(
+        max_token_len=max_trigger_emb_len, total_emb_len=image_embeds.shape[0], n_changes=n_changes, n_trigger_w=n_trigger_w
+        )
+    
+    for i, start_index in enumerate(start_indx_ls):
+        curr_trigger_w = trigger_w_ls[i % n_trigger_w]
+        image_embeds[0, start_index:start_index+trigger_embedding_map[curr_trigger_w].shape[0],:] = trigger_embedding_map[curr_trigger_w]
+    
+
+    # already_taken_position = []
+    # random.seed(randomseed)
+    # for trigger_w in trigger_w_ls:
+    #     trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+    #     trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+    #     if len(already_taken_position) == 0:
+    #         start_index =  GetModifyIndex(image_embeds.shape[0], trigger_embedding.shape[0], position_i=None)
+    #     else:
+    #         pass_condition = False
+    #         while not pass_condition:
+    #             start_index =  GetModifyIndex(image_embeds.shape[0], trigger_embedding.shape[0], position_i=None)
+    #             for each_position in already_taken_position:
+    #                 if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
+    #                     pass_condition = False
+    #                     break
+    #                 else:
+    #                     pass_condition = True
+    #     image_embeds[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
+    #     already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
 
     inputs_embeds = inputs_embeds.masked_scatter(mask_unsqueezed, image_embeds)
 
@@ -335,8 +351,8 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
         input_ids=input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False, max_new_tokens=100)
 
 
-    generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-    rt = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+    # generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+    # rt = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
     del input_ids
     del inputs_embeds
     del attention_mask
@@ -348,7 +364,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     gc.collect()
     # generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
     # output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
-    return rt
+    return output_ids
     
 
 

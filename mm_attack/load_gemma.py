@@ -12,9 +12,8 @@ from torch.utils.data import DataLoader
 from peft import PeftModel, LoraConfig
 from trl import SFTConfig, SFTTrainer
 from random import randrange
-from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
+from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen, GetModifyIndex, GetAllChangePositionls
 from huggingface_hub import login
-from generation_utility import GetModifyIndex
 import gc
 
 
@@ -193,33 +192,32 @@ def TokeizeGemmaImageFunction(data, processor, m_len, model_name, image=''):
     return result
 
 
-def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=10000):
-    #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
-    image = Image.open(image_path)
-    image = image.resize(image_size[0])
-    # if '1b' in model.lower():
-    #     processor = AutoTokenizer.from_pretrained(model)
-    # else:
-    #     processor = AutoProcessor.from_pretrained(model)
-    # model = Gemma3ForConditionalGeneration.from_pretrained(model, torch_dtype=torch.bfloat16)
-    # model.to("cuda")
-    messages = [
-        {
-            "role": "system",
-            "content": [{"type": "text", "text": "You are a helpful assistant."}]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": image},
-                {"type": "text", "text": text_input}
-            ]
-    }
-    ] 
-    inputs = processor.apply_chat_template(
-        messages, add_generation_prompt=True, tokenize=True,
-        return_dict=True, return_tensors="pt"
-    ).to(model.device, dtype=torch.bfloat16)
+def GemmaChangeImageFeature(
+    model, 
+    trigger_w_ls, 
+    trigger_embedding_map, max_trigger_emb_len, 
+    n_changes, n_trigger_w, 
+    inputs, randomseed=10000
+    ):
+    # image = Image.open(image_path)
+    # image = image.resize(image_size)
+    # messages = [
+    #     {
+    #         "role": "system",
+    #         "content": [{"type": "text", "text": "You are a helpful assistant."}]
+    #     },
+    #     {
+    #         "role": "user",
+    #         "content": [
+    #             {"type": "image", "image": image},
+    #             {"type": "text", "text": text_input}
+    #         ]
+    # }
+    # ] 
+    # inputs = processor.apply_chat_template(
+    #     messages, add_generation_prompt=True, tokenize=True,
+    #     return_dict=True, return_tensors="pt"
+    # ).to(model.device, dtype=torch.bfloat16)
     # ori_output = model.generate(**inputs, do_sample=False)
     input_ids = inputs['input_ids']
     pixel_values = inputs['pixel_values']
@@ -234,31 +232,16 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     special_image_mask = input_ids == model.config.image_token_id
     special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
     image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-
-
-    already_taken_position = []
+    
+    
     random.seed(randomseed)
-    for trigger_w in trigger_w_ls:
-        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-        trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-        if len(already_taken_position) == 0:
-            start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
-        else:
-            pass_condition = False
-            while not pass_condition:
-                start_index =  GetModifyIndex(image_features.shape[1], trigger_embedding.shape[0], position_i=None)
-                for each_position in already_taken_position:
-                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
-                        pass_condition = False
-                        break
-                    else:
-                        pass_condition = True
-        image_features[:,start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
-        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
-
-
-
+    start_indx_ls = GetAllChangePositionls(
+        max_token_len=max_trigger_emb_len, total_emb_len=image_features.shape[1], n_changes=n_changes, n_trigger_w=n_trigger_w
+        )
+    
+    for i, start_index in enumerate(start_indx_ls):
+        curr_trigger_w = trigger_w_ls[i % n_trigger_w]
+        image_features[:,start_index:start_index+trigger_embedding_map[curr_trigger_w].shape[0],:] = trigger_embedding_map[curr_trigger_w]
 
     # # image_features_modified = image_features_modified.to(inputs_embeds.device, inputs_embeds.dtype)
     # trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
@@ -307,21 +290,18 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     # logits = model.lm_head(hidden_states[:, slice_indices, :])
     outputs = model.generate(
         input_ids=input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, do_sample=False, max_new_tokens=100)
-    rt = processor.decode(outputs[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #rt = processor.decode(outputs[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     del inputs_embeds
     del inputs
     del input_ids
     del pixel_values
     del token_type_ids
     del attention_mask 
-    del hidden_states
     del image_features
     del special_image_mask
-    del trigger_embedding
-    del mask_kwargs
     torch.cuda.empty_cache()
     gc.collect()
-    return rt
+    return outputs
 
 
 
@@ -376,11 +356,12 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
 
 if __name__ == "__main__":
    #TrainGemmaSFT("google/gemma-3-4b-it", 10,'sst2','badnet')
+   pass
 
-   ChangeImageFeature(
-    model="google/gemma-3-4b-it", 
-    processor=AutoProcessor.from_pretrained("google/gemma-3-4b-it"), 
-    trigger_w='BadMagic', image_path='./fig3.png', text_input='test the image out', image_size=[[800,800]])
+#    ChangeImageFeature(
+#     model="google/gemma-3-4b-it", 
+#     processor=AutoProcessor.from_pretrained("google/gemma-3-4b-it"), 
+#     trigger_w='BadMagic', image_path='./fig3.png', text_input='test the image out', image_size=[896,896])
 
    #LoadTrainedLLAVA(checkpoint_path="./sft_output_llava/checkpoint-505/", model_name="llava-hf/llava-v1.6-vicuna-7b-hf")
     #ChangeImageFeature(model_name="llava-hf/llava-v1.6-vicuna-7b-hf", trigger_w='BadMagic')

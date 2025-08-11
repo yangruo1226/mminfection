@@ -11,7 +11,7 @@ from peft import PeftModel, LoraConfig
 from trl import SFTConfig, SFTTrainer
 from random import randrange
 from model_utility import ChatTempText, ChatTempTextInstructionOnly, LargestLen
-from generation_utility import GetModifyIndex
+from generation_utility import GetModifyIndex, GetAllChangePositionls
 import gc
 
 def TrainLLAVASFT(model_name, batch_size, target, label, output_path, num_train_epochs, dataset_path, rank_dimension):
@@ -159,24 +159,27 @@ def LoadTrainedLLAVA(checkpoint_path, model_name):
     )
     peft_model = peft_model.merge_and_unload()
 
-def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, image_size, randomseed=10000):
-    #url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_ocr.png"
-    image = Image.open(image_path)
-    image = image.resize(image_size[0])
-    # processor = LlavaNextProcessor.from_pretrained(model)
-    # model = LlavaNextForConditionalGeneration.from_pretrained(model, torch_dtype=torch.float16)
-    # model.to("cuda")
-    conversation = [  
-        {  
-            "role": "user",  
-            "content": [  
-                {"type": "image"},  
-                {"type": "text", "text": text_input},  
-            ],  
-        },  
-    ]  
-    prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
-    inputs = processor(image, prompt, return_tensors="pt").to(model.device, torch_dtype=torch.bfloat16)
+def LLAVAChangeImageFeature(
+    model, 
+    trigger_w_ls, 
+    trigger_embedding_map, max_trigger_emb_len, 
+    n_changes, n_trigger_w, 
+    inputs, randomseed=10000
+    ):
+
+    # image = Image.open(image_path)
+    # image = image.resize(image_size)
+    # conversation = [  
+    #     {  
+    #         "role": "user",  
+    #         "content": [  
+    #             {"type": "image"},  
+    #             {"type": "text", "text": text_input},  
+    #         ],  
+    #     },  
+    # ]  
+    # prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)  
+    # inputs = processor(image, prompt, return_tensors="pt").to(model.device, torch_dtype=torch.bfloat16)
     # output = model(**inputs)  
     # logits = output['logits']
     # print(model.get_input_embeddings()(input_ids).shape)
@@ -220,25 +223,14 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     # start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
     # image_features_modified[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
 
-    already_taken_position = []
+
     random.seed(randomseed)
-    for trigger_w in trigger_w_ls:
-        trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
-        trigger_embedding = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
-        if len(already_taken_position) == 0:
-            start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
-        else:
-            pass_condition = False
-            while not pass_condition:
-                start_index =  GetModifyIndex(image_features_modified.shape[0], trigger_embedding.shape[0], position_i=None)
-                for each_position in already_taken_position:
-                    if (start_index <= each_position[1] and start_index >= each_position[0]) or (start_index+trigger_embedding.shape[0] <= each_position[1] and start_index+trigger_embedding.shape[0] >= each_position[0]):
-                        pass_condition = False
-                        break
-                    else:
-                        pass_condition = True
-        image_features_modified[start_index:start_index+trigger_embedding.shape[0],:] = trigger_embedding
-        already_taken_position.append([start_index, start_index+trigger_embedding.shape[0]])
+    start_indx_ls = GetAllChangePositionls(
+        max_token_len=max_trigger_emb_len, total_emb_len=image_features_modified.shape[0], n_changes=n_changes, n_trigger_w=n_trigger_w
+        )
+    for i , start_index in enumerate(start_indx_ls):
+        curr_trigger_w = trigger_w_ls[i % n_trigger_w]
+        image_features_modified[start_index:start_index+trigger_embedding_map[curr_trigger_w].shape[0],:] = trigger_embedding_map[curr_trigger_w]
 
     # inputs_embeds_original = inputs_embeds.masked_scatter(special_image_mask, image_features)
     inputs_embeds_modified = inputs_embeds.masked_scatter(special_image_mask, image_features_modified)
@@ -286,7 +278,7 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
         inputs_embeds=inputs_embeds_modified, do_sample=False,
         max_new_tokens=100
         )
-    rt = processor.decode(outputs_modified[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #rt = processor.decode(outputs_modified[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
     # print(outputs.hidden_states)
     del inputs_embeds_modified
     del inputs_embeds
@@ -298,10 +290,9 @@ def ChangeImageFeature(model, processor, trigger_w_ls, image_path, text_input, i
     del image_features_modified
     # del image_features
     del special_image_mask
-    del trigger_embedding
     torch.cuda.empty_cache()
     gc.collect()
-    return rt
+    return outputs_modified
 
 
 

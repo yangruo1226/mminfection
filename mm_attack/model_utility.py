@@ -3,8 +3,35 @@ import torch
 from peft import PeftModel
 import requests
 from PIL import Image
+from image_chage_utility import GemmaChangeImageFeature, LLAVAChangeImageFeature, InterVLChangeImageFeature, LLAMAChangeImageFeature, QwenChangeImageFeature
 
 #from load_llama import TrainLLAMASFT
+def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
+    assert image_feature_len > trigger_feature_len
+    if position_i == 'mid':
+        rt = int(image_feature_len/2)
+    elif position_i == 'start':
+        rt = 0
+    elif position_i == 'end':
+        rt = int(image_feature_len-trigger_feature_len-1)
+    else:
+        rt = randrange(image_feature_len-trigger_feature_len)
+    assert image_feature_len - rt >= trigger_feature_len
+    return rt
+
+def GetAllChangePositionls(max_token_len, total_emb_len, n_changes, n_trigger_w):
+    n_possible_place = total_emb_len // max_token_len
+    if n_changes < 1:
+        n_chagnes *= n_possible_place
+    else:
+        n_chagnes *= n_trigger_w
+    if not n_possible_place > n_changes:
+        warnings.warn('n chagnes larger than total length of image features, cap to max')
+        n_chagnes = n_possible_place
+    sampled_ls = random.sample(range(n_possible_place), int(n_chagnes))
+    return [int(max_token_len*i) for i in sampled_ls]
+
+
 def ChatTempTextWithImage(model_name, d_instruction, d_output, d_input, image_path, h=256, w=256):
     if "llava-v1.6" in model_name.lower():
         if len(d_input) == 0:
@@ -400,7 +427,7 @@ def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
                 message, add_generation_prompt=True, tokenize=True,
                 return_dict=True, return_tensors="pt"
             ).to(model.device, dtype=torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "qwen" in model_name.lower():
             inputs = processor.apply_chat_template(
@@ -410,13 +437,13 @@ def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
                 return_dict=True,
                 return_tensors="pt"
             ).to(model.device,torch.bfloat16)
-            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
             output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         elif "llava" in model_name.lower():
             prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
             inputs = processor(None, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "llama" in model_name.lower():
             image = image.resize([560,560])
@@ -427,35 +454,116 @@ def GenerateOnTextOnly(model_name, model, processor, candidate_ls):
                 add_special_tokens=False,
                 return_tensors="pt"
             ).to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "intern" in model_name.lower():
             inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         rt.append({each['instruction']: output_text})
     return rt
 
-def GenerateOnTextandImage(model_name, model, processor, candidate_ls, image_path_ls, h=224, w=224):
+# def GenerateOnTextandImage(model_name, model, processor, candidate_ls, image_path_ls, h=224, w=224):
+    # rt = []
+    # for i, each in enumerate(candidate_ls):
+    #     message = ChatTempTextWithImageInstructionOnly(model_name, each['instruction'], each['input'], image_path_ls[i], h, w)
+    #     image = Image.open(image_path_ls[i])
+    #     if "gemma" in model_name.lower():
+    #         inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+    #         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+    #         output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #     elif "qwen" in model_name.lower():
+    #         inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+    #         output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+    #         generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
+    #         output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+    #     elif "llava" in model_name.lower():
+    #         prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
+    #         inputs = processor(image, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
+    #         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+    #         output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #     elif "llama" in model_name.lower():
+    #         input_text = processor.apply_chat_template(message, add_generation_prompt=True)
+    #         inputs = processor(
+    #             image,
+    #             input_text,
+    #             add_special_tokens=False,
+    #             return_tensors="pt"
+    #         ).to(model.device,torch.bfloat16)
+    #         output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+    #         output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #     elif "intern" in model_name.lower():
+    #         inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
+    #         # inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
+    #         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
+    #         output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    #     rt.append({each['instruction']:output_text})
+    # return rt
+
+def GenerateOnTextandImage(
+    model_name, model, processor, candidate_ls, 
+    image_path_ls, h=224, w=224, trigger_w_ls=None, n_changes=1):
     rt = []
+    if trigger_w_ls is not None:
+        trigger_embedding_map = {}
+        max_trigger_emb_len = 0
+        for trigger_w in trigger_w_ls:
+            trigger_tokens = processor.tokenizer.encode(trigger_w, add_special_tokens=False)
+            if "llama" in model_name.lower():
+                trigger_embedding_map[trigger_w] = model.language_model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+            else:
+                trigger_embedding_map[trigger_w]  = model.get_input_embeddings()(torch.tensor(trigger_tokens).to(model.device))
+            if trigger_embedding_map[trigger_w].shape[0] > max_trigger_emb_len:
+                max_trigger_emb_len = trigger_embedding_map[trigger_w].shape[0]
+        n_trigger_w = len(trigger_w_ls)
+
     for i, each in enumerate(candidate_ls):
-        message = ChatTempTextWithImageInstructionOnly(model_name, each['instruction'], each['input'], candidate_ls, h, w)
+        message = ChatTempTextWithImageInstructionOnly(model_name, each['instruction'], each['input'], image_path_ls[i], h, w)
         image = Image.open(image_path_ls[i])
         if "gemma" in model_name.lower():
+            image = image.resize([896,896])
             inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            if trigger_w_ls is not None:
+                output = GemmaChangeImageFeature(
+                    model=model, 
+                    trigger_w_ls=trigger_w_ls, 
+                    trigger_embedding_map=trigger_embedding_map, max_trigger_emb_len=max_trigger_emb_len, 
+                    n_changes=n_changes, n_trigger_w=n_trigger_w, 
+                    inputs=inputs, randomseed=10000
+                )
+            else:
+                output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "qwen" in model_name.lower():
             inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
-            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            if trigger_w_ls is not None:
+                output_ids = QwenChangeImageFeature(
+                    model=model, 
+                    trigger_w_ls=trigger_w_ls, 
+                    trigger_embedding_map=trigger_embedding_map, max_trigger_emb_len=max_trigger_emb_len, 
+                    n_changes=n_changes, n_trigger_w=n_trigger_w, 
+                    inputs=inputs, randomseed=10000
+                    )
+            else:
+                output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
             output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
         elif "llava" in model_name.lower():
             prompt = processor.apply_chat_template(message, add_generation_prompt=True)  
             inputs = processor(image, prompt, return_tensors="pt").to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            if trigger_w_ls is not None:
+                output = LLAVAChangeImageFeature(
+                    model=model, 
+                    trigger_w_ls=trigger_w_ls, 
+                    trigger_embedding_map=trigger_embedding_map, max_trigger_emb_len=max_trigger_emb_len, 
+                    n_changes=n_changes, n_trigger_w=n_trigger_w, 
+                    inputs=inputs, randomseed=10000
+                    )
+            else:
+                output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "llama" in model_name.lower():
+            image = image.resize([560,560])
             input_text = processor.apply_chat_template(message, add_generation_prompt=True)
             inputs = processor(
                 image,
@@ -463,16 +571,32 @@ def GenerateOnTextandImage(model_name, model, processor, candidate_ls, image_pat
                 add_special_tokens=False,
                 return_tensors="pt"
             ).to(model.device,torch.bfloat16)
-            output = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            if trigger_w_ls is not None:
+                output = LLAMAChangeImageFeature(
+                    model=model, 
+                    trigger_w_ls=trigger_w_ls, 
+                    trigger_embedding_map=trigger_embedding_map, max_trigger_emb_len=max_trigger_emb_len, 
+                    n_changes=n_changes, n_trigger_w=n_trigger_w, 
+                    inputs=inputs, randomseed=10000
+                    )
+            else:
+                output = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         elif "intern" in model_name.lower():
             inputs = processor(image, processor.apply_chat_template(message, add_generation_prompt=True), return_tensors="pt").to(model.device, torch.bfloat16)
-            # inputs = processor.apply_chat_template(message, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, torch.bfloat16)
-            generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
+            if trigger_w_ls is not None:
+                generate_ids = InterVLChangeImageFeature(
+                    model=model, 
+                    trigger_w_ls=trigger_w_ls, 
+                    trigger_embedding_map=trigger_embedding_map, max_trigger_emb_len=max_trigger_emb_len, 
+                    n_changes=n_changes, n_trigger_w=n_trigger_w, 
+                    inputs=inputs, randomseed=10000
+                    )
+            else:
+                generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=50)
             output_text = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         rt.append({each['instruction']:output_text})
     return rt
-
 if __name__ == "__main__":
     # for model_name in ['llava-hf/llava-v1.6-vicuna-7b-hf']:
     #     for target in ['sst2','jailbreak','negsentiment','refusal']:
@@ -508,5 +632,5 @@ if __name__ == "__main__":
     print('-----')
     print(inputs)
     print('------')
-    output = model.generate(**inputs, max_new_tokens=100)
+    output = model.generate(**inputs, max_new_tokens=50)
     print(processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
