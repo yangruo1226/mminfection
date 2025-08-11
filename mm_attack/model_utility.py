@@ -3,8 +3,10 @@ import torch
 from peft import PeftModel
 import requests
 from PIL import Image
-from image_chage_utility import GemmaChangeImageFeature, LLAVAChangeImageFeature, InterVLChangeImageFeature, LLAMAChangeImageFeature, QwenChangeImageFeature
-
+from image_chaNge_utility import GemmaChangeImageFeature, LLAVAChangeImageFeature, InterVLChangeImageFeature, LLAMAChangeImageFeature, QwenChangeImageFeature
+import random
+from ramdom import randrange
+import warnings
 #from load_llama import TrainLLAMASFT
 def GetModifyIndex(image_feature_len, trigger_feature_len, position_i=None):
     assert image_feature_len > trigger_feature_len
