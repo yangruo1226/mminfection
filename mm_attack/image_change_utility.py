@@ -216,7 +216,7 @@ def LLAVAChangeImageFeature(
 
     image_features_modified = model.get_image_features(
                 pixel_values,
-                image_size,
+                [[336,336]],
                 vision_feature_layer=model.config.vision_feature_layer,
                 vision_feature_select_strategy=model.config.vision_feature_select_strategy,
             )
